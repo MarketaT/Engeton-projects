@@ -1,0 +1,78 @@
+import requests
+import sys
+import os
+import csv
+from datetime import datetime as dt
+from bs4 import BeautifulSoup as bs
+import pprint
+
+csv_name = str(input("Write name of the csv file without the suffix .csv: ") + ".csv")
+link = input("Write link where the list of the municipalities is located:")
+#link = "https://volby.cz/pls/ps2017nss/ps32?xjazyk=CZ&xkraj=8&xnumnuts=5201"
+header = ['code', 'location', 'registered', 'envelopes', 'valid', 'Občanská demokratická strana',
+          'Řád národa - Vlastenecká unie', 'CESTA ODPOVĚDNÉ SPOLEČNOSTI', 'Česká str.sociálně demokrat.',
+          'Radostné Česko', 'STAROSTOVÉ A NEZÁVISLÍ', 'Komunistická str.Čech a Moravy', 'Strana zelených',
+          'ROZUMNÍ-stop migraci,diktát.EU', 'Strana svobodných občanů', 'Blok proti islam.-Obran.domova',
+          'Občanská demokratická aliance', 'Česká pirátská strana', 'Referendum o Evropské unii', 'TOP 09',
+          'ANO 2011', 'Dobrá volba 2016', 'SPR-Republ.str.Čsl. M.Sládka', 'Křesť.demokr.unie-Čs.str.lid.',
+          'REALISTÉ', 'SPORTOVCI', 'Dělnic.str.sociální spravedl.', 'Svob.a př.dem.-T.Okamura (SPD)',
+          'Strana Práv Občanů']
+
+def scrape_data(link):
+    r = requests.get(link)
+    soup = bs(r.text, "html.parser")
+    data = [[]]
+    #header = [[]]
+    i = 0
+
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr")
+        for row in rows[2:]:
+            cells = row.find_all("td")
+            data[i].append(cells[1].contents[0])  # code
+            data[i].append(cells[0].contents[0].string)  # location
+            for x in cells[0]:
+                try:
+                    test_address = "http://volby.cz/pls/ps2017nss/" + str(x["href"])
+                    r = requests.get(test_address)
+                    soup = bs(r.text, "html.parser")
+                    tables = soup.find_all("table")
+                    data[i].append(tables[0].find('td', {'headers': 'sa2'}).string)  # registered
+                    data[i].append(tables[0].find('td', {
+                        'headers': 'sa5'}).string)  # envelopes (neni jasne, jestli brat sloupec VYDANE nebo ODEVZDANE obalky
+                    data[i].append(tables[0].find('td', {'headers': 'sa6'}).string)  # valid
+                    for j in range(1, len(tables)):
+                        rows = tables[j].find_all("tr")
+                        try:
+                            for k in range(2, len(rows) + 1):
+                                cells = rows[k].find_all("td")
+                                data[i].append(cells[2].contents[0])  # votes
+                                #header[i].append(cells[1].contents[0]) # header
+                        except:
+                            continue
+                except:
+                    continue
+            i = i + 1
+            data.append([])  # pridam prazdny list
+            #header.append([]) # pridam prazdny list
+
+    return data
+
+def csv_mode(csv_name):
+    csv_existed = csv_name in os.listdir()  # true pokud csv existuje listdir da vsechny soubory a slozky
+    mode = 'a' if csv_existed else 'w'  # append pokud exituje, jinak vytvori a writuje
+    return mode
+
+def write_data(header, data, mode, csv_name):
+    with open(csv_name, mode) as f:
+        writer = csv.writer(f)
+        writer.writerow(header) # nadpis
+        writer.writerows(data) # data
+        f.close()
+
+if __name__ == "__main__":
+    try:
+        write_data(header, scrape_data(link), csv_mode(csv_name),csv_name)
+        print("Success!")
+    except:
+        print("Ups, errors!")
